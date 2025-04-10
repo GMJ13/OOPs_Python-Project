@@ -1,19 +1,92 @@
 import numpy as np
+from interest_rate_model import InterestRateModel
 
-class CIRModel:
+
+class CIRModel(InterestRateModel):
     def __init__(self, alpha, beta, sigma, r0):
         self.alpha = alpha  # Mean reversion speed
-        self.beta = beta    # Long-term mean rate
+        self.beta = beta  # Long-term mean rate
         self.sigma = sigma  # Volatility
-        self.r0 = r0        # Initial interest rate
+        self.r0 = r0  # Initial interest rate
 
     def simulate_path(self, time_horizon, steps):
+        """
+        Simulate short rate paths using the CIR model.
+
+        Parameters:
+        -----------
+        time_horizon : float
+            The time horizon in years for the simulation.
+        steps : int
+            The number of time steps in the simulation.
+
+        Returns:
+        --------
+        ndarray
+            An array containing the simulated short rates.
+        """
         dt = time_horizon / steps
         rates = np.zeros(steps)
         rates[0] = self.r0
 
         for i in range(1, steps):
-            dr = self.alpha * (self.beta - rates[i - 1]) * dt + self.sigma * np.sqrt(rates[i - 1]) * np.sqrt(dt) * np.random.normal()
+            dr = self.alpha * (self.beta - rates[i - 1]) * dt + self.sigma * np.sqrt(rates[i - 1]) * np.sqrt(
+                dt) * np.random.normal()
             rates[i] = max(rates[i - 1] + dr, 0)  # Ensure rates are non-negative
 
         return rates
+
+    def get_discount_factor(self, t):
+        """
+        Calculate the discount factor for time t under the CIR model.
+
+        For the CIR model, this is derived analytically from the bond pricing formula.
+
+        Parameters:
+        -----------
+        t : float
+            The time in years for which to calculate the discount factor.
+
+        Returns:
+        --------
+        float
+            The discount factor for time t.
+        """
+        # Calculate parameters for the CIR bond pricing formula
+        gamma = np.sqrt(self.alpha ** 2 + 2 * self.sigma ** 2)
+
+        # Calculate terms for the bond price formula
+        denominator = 2 * gamma + (self.alpha + gamma) * (np.exp(gamma * t) - 1)
+        A = ((2 * gamma * np.exp((self.alpha + gamma) * t / 2)) / denominator) ** (
+                    2 * self.alpha * self.beta / self.sigma ** 2)
+
+        numerator = 2 * (np.exp(gamma * t) - 1)
+        B = numerator / denominator
+
+        # Return the discount factor
+        return A * np.exp(-B * self.r0)
+
+    def get_zero_coupon_bond_price(self, t, T):
+        """
+        Calculate the price of a zero-coupon bond maturing at time T.
+
+        Parameters:
+        -----------
+        t : float
+            Current time.
+        T : float
+            Maturity time of the bond.
+
+        Returns:
+        --------
+        float
+            The price of the zero-coupon bond.
+        """
+        if t >= T:
+            return 1.0
+
+        # Time to maturity
+        tau = T - t
+
+        # Get the discount factor for the remaining time
+        return self.get_discount_factor(tau)
